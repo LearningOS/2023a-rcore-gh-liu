@@ -1,6 +1,6 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
-use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
@@ -146,6 +146,17 @@ impl PageTable {
     /// get the token from the page table
     pub fn token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
+    }
+
+    pub fn translate_addr(&self, va: VirtAddr) -> Option<PhysAddr> {
+        let vpn = va.floor();
+        if let Some(pte) = self.translate(vpn) {
+            Some(PhysAddr(
+                &mut pte.ppn().get_bytes_array()[va.page_offset()] as *mut u8 as usize,
+            ))
+        } else {
+            None
+        }
     }
 }
 

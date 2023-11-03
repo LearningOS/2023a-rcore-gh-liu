@@ -233,6 +233,12 @@ impl MemorySet {
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.page_table.translate(vpn)
     }
+
+    /// Translate a virtual address to a physical address
+    pub fn translate_addr(&self, vp: VirtAddr) -> Option<PhysAddr> {
+        self.page_table.translate_addr(vp)
+    }
+
     /// shrink the area to new_end
     #[allow(unused)]
     pub fn shrink_to(&mut self, start: VirtAddr, new_end: VirtAddr) -> bool {
@@ -261,6 +267,49 @@ impl MemorySet {
         } else {
             false
         }
+    }
+
+    /// set the map between virtual page number and physical page number
+    pub fn map_range(&mut self, start: usize, len: usize, prot: usize) -> isize {
+        let st_vpn = VirtAddr::from(start).floor().0;
+        let ed_vpn = VirtAddr::from(start + len - 1).floor().0;
+
+        // println!("{} {}", st_vpn, ed_vpn);
+
+        let flags = PTEFlags::from_bits((prot << 1) as u8).unwrap() | PTEFlags::U;
+
+        for cur_vpn in st_vpn..=ed_vpn {
+            if let Some(pte) = self.translate(VirtPageNum::from(cur_vpn)) {
+                if pte.is_valid() {
+                    return -1;
+                }
+            }
+            self.page_table.map(
+                VirtPageNum::from(cur_vpn),
+                frame_alloc().unwrap().ppn,
+                flags,
+            );
+        }
+        0
+    }
+
+    /// remove the map between virtual page number and physical page number
+    pub fn unmap_range(&mut self, start: usize, len: usize) -> isize {
+        let st_vpn = VirtAddr::from(start).floor().0;
+        let ed_vpn = VirtAddr::from(start + len - 1).floor().0;
+
+        for cur_vpn in st_vpn..=ed_vpn {
+            if let Some(pte) = self.translate(VirtPageNum::from(cur_vpn)) {
+                if pte.is_valid() {
+                    self.page_table.unmap(VirtPageNum::from(cur_vpn));
+                } else {
+                    return -1;
+                }
+            } else {
+                return -1;
+            }
+        }
+        0
     }
 }
 /// map area structure, controls a contiguous piece of virtual memory
