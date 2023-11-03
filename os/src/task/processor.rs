@@ -5,9 +5,11 @@
 //! and the replacement and transfer of control flow of different applications are executed.
 
 use super::__switch;
-use super::{fetch_task, TaskStatus};
+use super::{get_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
+use crate::config::MAX_SYSCALL_NUM;
 use crate::sync::UPSafeCell;
+use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
@@ -55,12 +57,16 @@ lazy_static! {
 pub fn run_tasks() {
     loop {
         let mut processor = PROCESSOR.exclusive_access();
-        if let Some(task) = fetch_task() {
+        if let Some(task) = get_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
             let mut task_inner = task.inner_exclusive_access();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
+            // let time = task_inner.task_time;
+            // if time == 0 {
+            task_inner.task_time = get_time_ms();
+            // } else
             // release coming task_inner manually
             drop(task_inner);
             // release coming task TCB manually
@@ -90,6 +96,12 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 pub fn current_user_token() -> usize {
     let task = current_task().unwrap();
     task.get_user_token()
+}
+
+/// Get current task through take, leaving a None in its place
+pub fn current_task_info() -> (TaskStatus, usize, [u32; MAX_SYSCALL_NUM]) {
+    let task = current_task().unwrap();
+    task.taskinfo()
 }
 
 ///Get the mutable reference to trap context of current task
